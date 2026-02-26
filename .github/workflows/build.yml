@@ -3,15 +3,15 @@ on: [push]
 
 jobs:
   build-mac:
-    # macos-13 is the Intel runner required for older Mac compatibility
-    runs-on: macos-13
+    # Use macos-12 to avoid the 'not supported' error while still building for Intel
+    runs-on: macos-12 
     steps:
       - uses: actions/checkout@v4
       
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.8'
+          python-version: '3.8' # Keep 3.8 for maximum compatibility with old Macs
       
       - name: Install System Dependencies
         run: |
@@ -20,15 +20,12 @@ jobs:
           
       - name: Build App
         run: |
-          # Target macOS 10.15 (Catalina)
+          # Keep this at 10.15 to support your older Mac OS
           export MACOSX_DEPLOYMENT_TARGET=10.15
           
-          # Find the paths of the installed tools
           TESS_PATH=$(which tesseract)
           POP_PATH=$(brew --prefix poppler)/bin
           
-          # Build the standalone .app
-          # --target-arch x86_64 ensures it runs on Intel Macs (macOS 10 era)
           pyinstaller --onefile --windowed \
             --target-arch x86_64 \
             --add-binary "$TESS_PATH:." \
@@ -38,5 +35,5 @@ jobs:
       - name: Upload Mac App
         uses: actions/upload-artifact@v4
         with:
-          name: TicketOCR-Mac-Intel
+          name: TicketOCR-Old-Mac
           path: dist/*.app

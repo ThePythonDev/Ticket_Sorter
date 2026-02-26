@@ -3,9 +3,11 @@ on: [push]
 
 jobs:
   build-mac:
-    runs-on: macos-latest
+    # Changed from latest to 13 to ensure it builds for Intel (macOS 10 era)
+    runs-on: macos-13 
     steps:
       - uses: actions/checkout@v4
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -18,10 +20,15 @@ jobs:
           
       - name: Build App
         run: |
+          # Set the target to macOS 10.15 (Catalina)
+          export MACOSX_DEPLOYMENT_TARGET=10.15
+          
           TESS_PATH=$(which tesseract)
           POP_PATH=$(brew --prefix poppler)/bin
           
+          # We include --target-arch x86_64 to be extra safe for older Macs
           pyinstaller --onefile --windowed \
+            --target-arch x86_64 \
             --add-binary "$TESS_PATH:." \
             --add-binary "$POP_PATH:poppler-library" \
             ticket_app.py

@@ -5,24 +5,24 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
-        with: {python-version: '3.10'}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
       
       - name: Install Tools
         run: |
           pip install PySide6 pytesseract pandas openpyxl pdf2image pyinstaller
-          # Download portable Tesseract and Poppler for Windows bundling
           choco install tesseract poppler
           
       - name: Build EXE
         run: |
-          # Note: We tell PyInstaller to include the Tesseract/Poppler folders
+          # Note: We bundle Tesseract and Poppler into the EXE
           pyinstaller --onefile --windowed --add-binary "C:/Program Files/Tesseract-OCR;Tesseract-OCR" --add-binary "C:/Program Files/poppler-*;poppler-library" ticket_app.py
 
       - name: Upload Windows App
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: TicketOCR-Windows
           path: dist/*.exe
@@ -30,10 +30,11 @@ jobs:
   build-mac:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
-        with: {python-version: '3.10'}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
       
       - name: Install Tools
         run: |
@@ -43,10 +44,10 @@ jobs:
       - name: Build App
         run: |
           # On Mac, we bundle the tesseract binary specifically
-          pyinstaller --onefile --windowed --add-binary "/usr/local/bin/tesseract:." ticket_app.py
+          pyinstaller --onefile --windowed --add-binary "$(which tesseract):." ticket_app.py
 
       - name: Upload Mac App
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: TicketOCR-Mac
           path: dist/*.app

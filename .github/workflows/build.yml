@@ -4,7 +4,7 @@ on: [push]
 jobs:
   build-mac:
     # macos-13 is the Intel runner required for older Mac compatibility
-    runs-on: macos-13 
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       

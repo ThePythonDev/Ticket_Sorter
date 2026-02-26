@@ -2,62 +2,6 @@ name: Build Standalone Apps
 on: [push]
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      
-      - name: Install Tools
-        run: |
-          pip install PySide6 pytesseract pandas openpyxl pdf2image pyinstaller
-          choco install tesseract poppler --no-progress
-          
-      - name: Build EXE
-        shell: pwsh
-        run: |
-          # Robust search for Poppler binaries
-          $popPath = ""
-          $searchPaths = @(
-              "C:\ProgramData\chocolatey\lib\poppler\tools\bin",
-              "C:\ProgramData\chocolatey\bin",
-              "C:\ProgramData\chocolatey\lib\poppler\tools"
-          )
-          
-          foreach ($path in $searchPaths) {
-              if (Test-Path "$path\pdftocairo.exe") {
-                  $popPath = $path
-                  break
-              }
-          }
-          
-          if ($popPath -eq "") {
-              Write-Host "Searching deep for pdftocairo.exe..."
-              $popPath = (Get-ChildItem -Path "C:\ProgramData\chocolatey" -Filter "pdftocairo.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).DirectoryName
-          }
-
-          $tessPath = "C:\Program Files\Tesseract-OCR"
-          
-          if (-not $popPath) { Write-Error "Poppler NOT FOUND"; exit 1 }
-          if (-not (Test-Path $tessPath)) { Write-Error "Tesseract NOT FOUND"; exit 1 }
-
-          Write-Host "SUCCESS: Poppler found at $popPath"
-          Write-Host "SUCCESS: Tesseract found at $tessPath"
-
-          pyinstaller --onefile --windowed `
-            --add-binary "$tessPath;Tesseract-OCR" `
-            --add-binary "$popPath;poppler-library" `
-            ticket_app.py
-
-      - name: Upload Windows App
-        uses: actions/upload-artifact@v4
-        with:
-          name: TicketOCR-Windows
-          path: dist/*.exe
-
   build-mac:
     runs-on: macos-latest
     steps:

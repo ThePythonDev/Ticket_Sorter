@@ -27,7 +27,7 @@ jobs:
             ticket_app.py
 
       - name: Upload Mac App
-        uses: actions/artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: TicketOCR-Mac
           path: dist/*.app

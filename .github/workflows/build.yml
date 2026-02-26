@@ -19,13 +19,15 @@ jobs:
       - name: Build EXE
         shell: pwsh
         run: |
-          # Dynamically find the Poppler bin folder installed by Chocolatey
-          $popPath = (Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\poppler\*" -Include "bin" -Recurse | Select-Object -First 1).FullName
+          # Precisely locate poppler and tesseract
+          $popExe = (Get-ChildItem -Path "C:\ProgramData\chocolatey" -Filter "pdftocairo.exe" -Recurse | Select-Object -First 1).FullName
+          $popPath = Split-Path -Parent $popExe
           $tessPath = "C:\Program Files\Tesseract-OCR"
           
-          echo "Found Poppler at: $popPath"
-          echo "Found Tesseract at: $tessPath"
+          Write-Host "Poppler found at: $popPath"
+          Write-Host "Tesseract found at: $tessPath"
           
+          # Build the EXE
           pyinstaller --onefile --windowed `
             --add-binary "$tessPath;Tesseract-OCR" `
             --add-binary "$popPath;poppler-library" `
@@ -53,7 +55,6 @@ jobs:
           
       - name: Build App
         run: |
-          # Get the actual paths on the Mac runner
           TESS_PATH=$(which tesseract)
           POP_PATH=$(brew --prefix poppler)/bin
           

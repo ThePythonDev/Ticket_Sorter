@@ -17,9 +17,19 @@ jobs:
           choco install tesseract poppler
           
       - name: Build EXE
+        shell: pwsh
         run: |
-          # Note: We bundle Tesseract and Poppler into the EXE
-          pyinstaller --onefile --windowed --add-binary "C:/Program Files/Tesseract-OCR;Tesseract-OCR" --add-binary "C:/Program Files/poppler-*;poppler-library" ticket_app.py
+          # Dynamically find the Poppler bin folder installed by Chocolatey
+          $popPath = (Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\poppler\*" -Include "bin" -Recurse | Select-Object -First 1).FullName
+          $tessPath = "C:\Program Files\Tesseract-OCR"
+          
+          echo "Found Poppler at: $popPath"
+          echo "Found Tesseract at: $tessPath"
+          
+          pyinstaller --onefile --windowed `
+            --add-binary "$tessPath;Tesseract-OCR" `
+            --add-binary "$popPath;poppler-library" `
+            ticket_app.py
 
       - name: Upload Windows App
         uses: actions/upload-artifact@v4
@@ -43,8 +53,14 @@ jobs:
           
       - name: Build App
         run: |
-          # On Mac, we bundle the tesseract binary specifically
-          pyinstaller --onefile --windowed --add-binary "$(which tesseract):." ticket_app.py
+          # Get the actual paths on the Mac runner
+          TESS_PATH=$(which tesseract)
+          POP_PATH=$(brew --prefix poppler)/bin
+          
+          pyinstaller --onefile --windowed \
+            --add-binary "$TESS_PATH:." \
+            --add-binary "$POP_PATH:poppler-library" \
+            ticket_app.py
 
       - name: Upload Mac App
         uses: actions/upload-artifact@v4

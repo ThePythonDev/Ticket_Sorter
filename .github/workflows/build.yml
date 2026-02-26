@@ -14,20 +14,39 @@ jobs:
       - name: Install Tools
         run: |
           pip install PySide6 pytesseract pandas openpyxl pdf2image pyinstaller
-          choco install tesseract poppler
+          choco install tesseract poppler --no-progress
           
       - name: Build EXE
         shell: pwsh
         run: |
-          # Precisely locate poppler and tesseract
-          $popExe = (Get-ChildItem -Path "C:\ProgramData\chocolatey" -Filter "pdftocairo.exe" -Recurse | Select-Object -First 1).FullName
-          $popPath = Split-Path -Parent $popExe
+          # Robust search for Poppler binaries
+          $popPath = ""
+          $searchPaths = @(
+              "C:\ProgramData\chocolatey\lib\poppler\tools\bin",
+              "C:\ProgramData\chocolatey\bin",
+              "C:\ProgramData\chocolatey\lib\poppler\tools"
+          )
+          
+          foreach ($path in $searchPaths) {
+              if (Test-Path "$path\pdftocairo.exe") {
+                  $popPath = $path
+                  break
+              }
+          }
+          
+          if ($popPath -eq "") {
+              Write-Host "Searching deep for pdftocairo.exe..."
+              $popPath = (Get-ChildItem -Path "C:\ProgramData\chocolatey" -Filter "pdftocairo.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).DirectoryName
+          }
+
           $tessPath = "C:\Program Files\Tesseract-OCR"
           
-          Write-Host "Poppler found at: $popPath"
-          Write-Host "Tesseract found at: $tessPath"
-          
-          # Build the EXE
+          if (-not $popPath) { Write-Error "Poppler NOT FOUND"; exit 1 }
+          if (-not (Test-Path $tessPath)) { Write-Error "Tesseract NOT FOUND"; exit 1 }
+
+          Write-Host "SUCCESS: Poppler found at $popPath"
+          Write-Host "SUCCESS: Tesseract found at $tessPath"
+
           pyinstaller --onefile --windowed `
             --add-binary "$tessPath;Tesseract-OCR" `
             --add-binary "$popPath;poppler-library" `
@@ -64,7 +83,7 @@ jobs:
             ticket_app.py
 
       - name: Upload Mac App
-        uses: actions/upload-artifact@v4
+        uses: actions/artifact@v4
         with:
           name: TicketOCR-Mac
           path: dist/*.app

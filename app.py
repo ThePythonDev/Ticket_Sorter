@@ -17,7 +17,7 @@ def find_val(text, patterns):
 def process_scanned_pdf(pdf_bytes):
     all_rows = []
     # dpi=200 is a good balance between speed and OCR accuracy
-    images = convert_from_bytes(pdf_bytes, dpi=200)
+    images = convert_from_bytes(pdf_bytes, dpi=600)
     
     for i, image in enumerate(images):
         text = pytesseract.image_to_string(image)

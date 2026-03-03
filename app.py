@@ -1,28 +1,37 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import pandas as pd
-import io
 
 st.set_page_config(page_title="Puter AI Ticket Processor", layout="wide")
 
 st.title("🌲 Puter.js + Streamlit: Ticket AI")
-st.write("This app uses Puter's browser-based AI to process scanned tickets.")
+st.write("Processing scanned tickets via Puter's browser-based AI.")
 
-# 1. We create the JavaScript/HTML logic for Puter.js
-# This will be embedded as an iframe inside Streamlit
+# This is the full JS/HTML engine
 puter_component = """
-<div id="puter-root" style="background-color: #1e1e1e; color: white; padding: 20px; font-family: sans-serif; border-radius: 10px;">
+<div id="puter-root" style="background-color: #0e1117; color: white; padding: 20px; font-family: sans-serif; border-radius: 10px; border: 1px solid #30363d;">
     <script src="https://js.puter.com/v2/"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     
-    <div style="text-align: center; border: 2px dashed #444; padding: 20px;">
-        <input type="file" id="pdf-file" accept="application/pdf" style="margin-bottom: 10px;"><br>
-        <button id="process-btn" style="background-color: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
-            🚀 Analyze with Puter AI
+    <div style="text-align: center; border: 2px dashed #444; padding: 30px; border-radius: 10px; background: #161b22;">
+        <input type="file" id="pdf-file" accept="application/pdf" style="margin-bottom: 15px; color: #8b949e;"><br>
+        <button id="process-btn" style="background-color: #238636; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px;">
+            🚀 Start AI Analysis
         </button>
     </div>
-    <p id="status" style="color: #ffc107; margin-top: 10px;"></p>
-    <pre id="output" style="background: #000; padding: 10px; font-size: 12px; max-height: 200px; overflow-y: auto; border-radius: 5px; display: none;"></pre>
+    
+    <p id="status" style="color: #e3b341; margin-top: 15px; font-weight: bold;"></p>
+    
+    <div id="download-container" style="display: none; margin-top: 20px; padding: 20px; background: #21262d; border-radius: 8px; text-align: center;">
+        <p style="margin-bottom: 15px; color: #7ee787;">✅ Analysis Complete!</p>
+        <button id="download-csv-btn" style="background-color: #1f6feb; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">
+            📥 Download Master Log CSV
+        </button>
+    </div>
+
+    <details style="margin-top: 20px; cursor: pointer;">
+        <summary style="color: #8b949e; font-size: 13px;">View Raw AI Data (JSON)</summary>
+        <pre id="output" style="background: #000; padding: 15px; font-size: 12px; max-height: 250px; overflow-y: auto; border-radius: 6px; margin-top: 10px; border: 1px solid #30363d; color: #d1d5da;"></pre>
+    </details>
 </div>
 
 <script>
@@ -31,102 +40,130 @@ puter_component = """
     const status = document.getElementById('status');
     const output = document.getElementById('output');
     const processBtn = document.getElementById('process-btn');
+    const downloadContainer = document.getElementById('download-container');
+    const downloadCsvBtn = document.getElementById('download-csv-btn');
     
+    let processedData = [];
+
     processBtn.onclick = async () => {
         const fileInput = document.getElementById('pdf-file');
         if (!fileInput.files.length) {
-            status.innerText = "Please select a PDF first.";
+            status.innerText = "❌ Please select a PDF file first.";
             return;
         }
 
-        status.innerText = "Initializing Puter AI...";
+        processBtn.disabled = true;
+        processBtn.style.opacity = "0.5";
+        downloadContainer.style.display = "none";
+        processedData = [];
+        
         const file = fileInput.files[0];
         const reader = new FileReader();
 
         reader.onload = async function() {
-            const typedarray = new Uint8Array(this.result);
-            const pdf = await pdfjsLib.getDocument(typedarray).promise;
-            let results = [];
-
-            for (let i = 1; i <= pdf.numPages; i++) {
-                status.innerText = `AI is looking at page ${i} of ${pdf.numPages}...`;
+            try {
+                const typedarray = new Uint8Array(this.result);
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
                 
-                // Convert PDF Page to Image
-                const page = await pdf.getPage(i);
-                const viewport = page.getViewport({scale: 1.5});
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-                await page.render({canvasContext: context, viewport: viewport}).promise;
-                
-                const base64Image = canvas.toDataURL('image/jpeg', 0.8);
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    status.innerText = `⏳ AI is analyzing page ${i} of ${pdf.numPages}...`;
+                    
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({scale: 2.0});
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    await page.render({canvasContext: context, viewport: viewport}).promise;
+                    
+                    const base64Image = canvas.toDataURL('image/jpeg', 0.8);
 
-                // Call Puter AI Vision
-                try {
                     const response = await puter.ai.chat(
-                        "Return ONLY a JSON object for this debris ticket: {\\"date\\":\\"MM/DD/YYYY\\", \\"id\\":\\"ticket_number\\", \\"type\\":\\"HANGER/LEANER\\", \\"measure\\": 0.0}",
+                        "Extract debris ticket info. Return ONLY a JSON object: {\\"date\\":\\"MM/DD/YYYY\\", \\"id\\":\\"number\\", \\"type\\":\\"HANGER/LEANER\\", \\"measure\\": 0.0}",
                         base64Image
                     );
                     
                     const cleanJson = response.message.content.replace(/```json|```/g, "").trim();
-                    results.push(JSON.parse(cleanJson));
-                } catch (err) {
-                    console.error("AI Page Error:", err);
+                    processedData.push(JSON.parse(cleanJson));
                 }
-            }
 
-            // Send data back to Streamlit or handle it here
-            status.innerText = "✅ Analysis Complete!";
-            output.style.display = "block";
-            output.innerText = JSON.stringify(results, null, 2);
-            
-            // Trigger a custom event to notify Streamlit if needed
-            // For now, we will handle CSV generation directly in the browser for speed
-            generateCSV(results);
+                status.innerText = "";
+                output.innerText = JSON.stringify(processedData, null, 2);
+                downloadContainer.style.display = "block";
+                processBtn.disabled = false;
+                processBtn.style.opacity = "1";
+
+            } catch (err) {
+                status.innerText = "❌ Error processing PDF. See console.";
+                console.error(err);
+                processBtn.disabled = false;
+                processBtn.style.opacity = "1";
+            }
         };
         reader.readAsArrayBuffer(file);
     };
 
-    function generateCSV(data) {
+    downloadCsvBtn.onclick = () => {
         let csv = "Contractor:,LUVKIN,,,,,,,,,,,,,,,,,\\nProject Name:,PRENTISS CO L/H,,,,,,,,,,,,,,,,,\\nDate,Ticket,Truck ID,Driver Name,1= HANGER / LEANER DIAMETER,$35.00,$80.00,$150.00,$175.00,$250.00,Sub Total,,, $40.00 ,$100.00,$175.00,$200.00,$275.00,TLM Total\\n";
         
-        data.forEach(item => {
+        processedData.forEach(item => {
             let row = Array(19).fill(" $- ");
-            row[0] = item.date; row[1] = item.id; row[2] = "848117"; row[3] = "Fernando";
-            row[11] = ""; row[12] = "";
+            row[0] = item.date || ""; 
+            row[1] = item.id || ""; 
+            row[2] = "848117"; 
+            row[3] = "Fernando";
+            row[11] = ""; row[12] = ""; // The two blank gap columns
 
             let m = parseFloat(item.measure) || 0;
-            if (item.type.toUpperCase().includes("HANGER")) {
+            let type = (item.type || "").toUpperCase();
+
+            if (type.includes("HANGER")) {
                 row[4] = "1";
-                row[5] = " $35.00 "; row[10] = " $35.00 "; row[13] = " $40.00 "; row[18] = " $40.00 ";
+                row[5] = " $35.00 "; row[10] = " $35.00 "; 
+                row[13] = " $40.00 "; row[18] = " $40.00 ";
             } else {
-                row[4] = m;
-                if (m > 0 && m <= 23.99) { row[6] = " $80.00 "; row[10] = " $80.00 "; row[14] = " $100.00 "; row[18] = " $100.00 "; }
-                else if (m >= 24 && m <= 35.99) { row[7] = " $150.00 "; row[10] = " $150.00 "; row[15] = " $175.00 "; row[18] = " $175.00 "; }
-                else if (m >= 36 && m <= 47.99) { row[8] = " $175.00 "; row[10] = " $175.00 "; row[16] = " $200.00 "; row[18] = " $200.00 "; }
-                else if (m >= 48) { row[9] = " $250.00 "; row[10] = " $250.00 "; row[17] = " $275.00 "; row[18] = " $275.00 "; }
+                row[4] = m.toString();
+                if (m > 0 && m <= 23.99) { 
+                    row[6] = " $80.00 "; row[10] = " $80.00 "; 
+                    row[14] = " $100.00 "; row[18] = " $100.00 "; 
+                }
+                else if (m >= 24 && m <= 35.99) { 
+                    row[7] = " $150.00 "; row[10] = " $150.00 "; 
+                    row[15] = " $175.00 "; row[18] = " $175.00 "; 
+                }
+                else if (m >= 36 && m <= 47.99) { 
+                    row[8] = " $175.00 "; row[10] = " $175.00 "; 
+                    row[16] = " $200.00 "; row[18] = " $200.00 "; 
+                }
+                else if (m >= 48) { 
+                    row[9] = " $250.00 "; row[10] = " $250.00 "; 
+                    row[17] = " $275.00 "; row[18] = " $275.00 "; 
+                }
             }
             csv += row.join(",") + "\\n";
         });
 
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'MasterLog_Output.csv';
-        a.click();
-    }
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "MasterLog_Generated.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 </script>
 """
 
-# 2. Render the component in Streamlit
-components.html(puter_component, height=600, scrolling=True)
+# Render the component
+components.html(puter_component, height=700, scrolling=True)
 
 st.markdown("""
 ---
-### How it works:
-1. **Local Processing:** The PDF is rendered in your browser. 
-2. **Puter AI:** The images are sent to Puter's multimodal AI model (no API key required in code).
-3. **CSV Export:** The range sorting logic ($80, $150, etc.) is calculated instantly and the CSV is downloaded directly to your computer.
+### Instructions:
+1. Select your PDF file in the box above.
+2. Click **Start AI Analysis**.
+3. Wait for the success message.
+4. Click the blue **Download Master Log CSV** button to save your file.
 """)

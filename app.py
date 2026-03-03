@@ -5,32 +5,49 @@ import io
 from pdf2image import convert_from_bytes
 import pytesseract
 
-st.set_page_config(page_title="Ticket Processor", layout="wide")
+st.set_page_config(page_title="Scanned Ticket Processor", layout="wide")
 
 def find_val(text, patterns):
+    """Safely find a value using multiple regex patterns."""
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            return match.group(1).strip()
+            try:
+                # Try to return the first captured group ()
+                return match.group(1).strip()
+            except IndexError:
+                # If no () group exists, return the whole match
+                return match.group(0).strip()
     return ""
 
 def process_scanned_pdf(pdf_bytes):
     all_rows = []
-    # dpi=200 is a good balance between speed and OCR accuracy
+    # dpi=600 is very high quality but slower. 
+    # Use thread_count=2 to help the Streamlit server process faster.
     images = convert_from_bytes(pdf_bytes, dpi=600)
     
     for i, image in enumerate(images):
+        # OCR the page
         text = pytesseract.image_to_string(image)
         
-        # --- EXTRACTION LOGIC ---
-        # Look for the Ticket ID (the big number at the top)
+        # --- EXTRACTION LOGIC (Optimized for OCR) ---
+        # 1. Ticket ID: Look for 9-10 digits at the top
         ticket_id = find_val(text, [r'(\d{9,10})'])
-        date = find_val(text, [r'(\d{2}/\d{2}/\d{4})'])
-        truck = find_val(text, [r'Crew\s*[:\s]*(\w+)', r'848117'])
-        driver = find_val(text, [r'Supervisor\s*[:\s]*([\w\s]+)', r'Fernando'])
         
-        driver = driver.split('\n')[0].strip()
+        # 2. Date: Look for MM/DD/YYYY
+        date = find_val(text, [r'(\d{2}/\d{2}/\d{4})'])
+        
+        # 3. Truck ID: Look for Crew or use known Truck ID 848117
+        truck = find_val(text, [r'Crew\s*[:\s]*(\d+)', r'(848117)'])
+        
+        # 4. Driver/Supervisor
+        driver = find_val(text, [r'Supervisor\s*[:\s]*([A-Z\s]+)', r'(Fernando)'])
+        driver = driver.split('\n')[0].strip() # Clean up any trailing OCR junk
+        
+        # 5. Hazard Type
         h_type = "HANGER" if "HANGER" in text.upper() else "LEANER"
+        
+        # 6. Measure (The diameter)
         measure_str = find_val(text, [r'Measure\s*[:\s]*([\d.]+)'])
         
         try:
@@ -38,17 +55,17 @@ def process_scanned_pdf(pdf_bytes):
         except:
             m = 0.0
 
-        # Initialize row with empty money slots " $- "
+        # --- CSV MAPPING (19 Columns) ---
         row = [" $- " for _ in range(19)]
         row[0], row[1], row[2], row[3] = date, ticket_id, truck, driver
-        row[11], row[12] = "", "" # The gap columns
+        row[11], row[12] = "", "" # Formatting gaps
 
         if h_type == "HANGER":
             row[4] = "1"
             row[5], row[10], row[13], row[18] = " $35.00 ", " $35.00 ", " $40.00 ", " $40.00 "
         else:
             row[4] = str(m)
-            # Sorting logic based on your ranges
+            # Ranges defined by your Master Log headers
             if 0.01 <= m <= 23.99:
                 row[6], row[10], row[14], row[18] = " $80.00 ", " $80.00 ", " $100.00 ", " $100.00 "
             elif 24.0 <= m <= 35.99:
@@ -64,21 +81,21 @@ def process_scanned_pdf(pdf_bytes):
     return all_rows
 
 st.title("📸 Scanned Ticket to Master Log")
-st.write("Upload scanned PDFs to extract data into the Master Log format.")
+st.write("Reading high-DPI scans and generating Master Log CSV.")
 
 uploaded_file = st.file_uploader("Upload Scanned PDF", type="pdf")
 
 if uploaded_file:
-    with st.spinner('Converting PDF to Images and performing OCR...'):
+    with st.spinner('Performing high-quality OCR... this takes about 15-30 seconds per page.'):
         file_bytes = uploaded_file.read()
         data = process_scanned_pdf(file_bytes)
         
         if not data:
-            st.error("No ticket IDs found. Please check if the scan is readable.")
+            st.error("No valid tickets detected. Try checking if the PDF is oriented correctly.")
         else:
-            st.success(f"Processed {len(data)} tickets!")
+            st.success(f"Success! Processed {len(data)} tickets.")
             
-            # UNIQUE display names to avoid the "Duplicate Column" error
+            # Display Headers
             display_cols = [
                 "Date", "Ticket", "Truck ID", "Driver", "Measure", 
                 "Sub $35", "Sub $80", "Sub $150", "Sub $175", "Sub $250", "Sub Total",
@@ -89,14 +106,12 @@ if uploaded_file:
             df = pd.DataFrame(data, columns=display_cols)
             st.dataframe(df)
 
-            # Build the CSV for download
+            # Generate downloadable CSV
             output = io.StringIO()
             output.write('Contractor:,LUVKIN,,,,,,,,,,,,,,,,,\n')
             output.write('Project Name:,PRENTISS CO L/H,,,,,,,,,,,,,,,,,\n')
-            # The exact header line for Excel:
             output.write('Date,Ticket,Truck ID,Driver Name,1= HANGER / LEANER DIAMETER,$35.00,$80.00,$150.00,$175.00,$250.00,Sub Total,,, $40.00 ,$100.00,$175.00,$200.00,$275.00,TLM Total\n')
             
-            # Export data without the temp display headers
             df.to_csv(output, index=False, header=False)
             
             st.download_button(

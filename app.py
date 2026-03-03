@@ -5,7 +5,7 @@ import io
 from pdf2image import convert_from_bytes
 import pytesseract
 
-st.set_page_config(page_title="Scanned Ticket Processor", layout="wide")
+st.set_page_config(page_title="Ticket Processor", layout="wide")
 
 def find_val(text, patterns):
     for pattern in patterns:
@@ -16,23 +16,20 @@ def find_val(text, patterns):
 
 def process_scanned_pdf(pdf_bytes):
     all_rows = []
-    # Convert PDF pages to images
-    # Thread_count=2 helps speed up the conversion on Streamlit servers
+    # dpi=200 is a good balance between speed and OCR accuracy
     images = convert_from_bytes(pdf_bytes, dpi=200)
     
     for i, image in enumerate(images):
-        # Perform OCR on the image
         text = pytesseract.image_to_string(image)
         
         # --- EXTRACTION LOGIC ---
+        # Look for the Ticket ID (the big number at the top)
         ticket_id = find_val(text, [r'(\d{9,10})'])
         date = find_val(text, [r'(\d{2}/\d{2}/\d{4})'])
-        truck = find_val(text, [r'Crew\s*[:\s]*(\w+)', r'Truck\s*ID\s*[:\s]*(\w+)', r'848117'])
-        driver = find_val(text, [r'Supervisor\s*[:\s]*([\w\s]+)', r'Driver\s*[:\s]*([\w\s]+)', r'Fernando'])
+        truck = find_val(text, [r'Crew\s*[:\s]*(\w+)', r'848117'])
+        driver = find_val(text, [r'Supervisor\s*[:\s]*([\w\s]+)', r'Fernando'])
         
-        # Clean up driver name if OCR picks up extra lines
         driver = driver.split('\n')[0].strip()
-        
         h_type = "HANGER" if "HANGER" in text.upper() else "LEANER"
         measure_str = find_val(text, [r'Measure\s*[:\s]*([\d.]+)'])
         
@@ -41,18 +38,17 @@ def process_scanned_pdf(pdf_bytes):
         except:
             m = 0.0
 
-        # Create a row with 19 slots initialized with " $- " (Matches your template)
+        # Initialize row with empty money slots " $- "
         row = [" $- " for _ in range(19)]
         row[0], row[1], row[2], row[3] = date, ticket_id, truck, driver
-        row[11], row[12] = "", "" # These are the middle gap columns in your CSV
+        row[11], row[12] = "", "" # The gap columns
 
         if h_type == "HANGER":
             row[4] = "1"
-            row[5], row[10] = " $35.00 ", " $35.00 " # Sub
-            row[13], row[18] = " $40.00 ", " $40.00 " # TLM
+            row[5], row[10], row[13], row[18] = " $35.00 ", " $35.00 ", " $40.00 ", " $40.00 "
         else:
             row[4] = str(m)
-            # Match the specific ranges from your CSV headers
+            # Sorting logic based on your ranges
             if 0.01 <= m <= 23.99:
                 row[6], row[10], row[14], row[18] = " $80.00 ", " $80.00 ", " $100.00 ", " $100.00 "
             elif 24.0 <= m <= 35.99:
@@ -68,33 +64,44 @@ def process_scanned_pdf(pdf_bytes):
     return all_rows
 
 st.title("📸 Scanned Ticket to Master Log")
-st.write("Processing scanned PDFs and converting to your Master Log format.")
+st.write("Upload scanned PDFs to extract data into the Master Log format.")
 
 uploaded_file = st.file_uploader("Upload Scanned PDF", type="pdf")
 
 if uploaded_file:
-    with st.spinner('Reading images and performing OCR... This may take a minute for large files.'):
+    with st.spinner('Converting PDF to Images and performing OCR...'):
         file_bytes = uploaded_file.read()
         data = process_scanned_pdf(file_bytes)
         
         if not data:
-            st.error("No ticket data found. Please ensure the scan is clear.")
+            st.error("No ticket IDs found. Please check if the scan is readable.")
         else:
             st.success(f"Processed {len(data)} tickets!")
             
-            # Use unique names for the DataFrame to avoid the "Duplicate Column" error
-            display_cols = ["Date", "Ticket", "Truck ID", "Driver", "Measure/Type", "$35 Slot", "$80 Slot", "$150 Slot", "$175 Slot", "$250 Slot", "Sub Total", "Gap1", "Gap2", "$40 Slot", "$100 Slot", "$175 Slot", "$200 Slot", "$275 Slot", "TLM Total"]
+            # UNIQUE display names to avoid the "Duplicate Column" error
+            display_cols = [
+                "Date", "Ticket", "Truck ID", "Driver", "Measure", 
+                "Sub $35", "Sub $80", "Sub $150", "Sub $175", "Sub $250", "Sub Total",
+                "Gap1", "Gap2", 
+                "TLM $40", "TLM $100", "TLM $175", "TLM $200", "TLM $275", "TLM Total"
+            ]
+            
             df = pd.DataFrame(data, columns=display_cols)
             st.dataframe(df)
 
-            # Manual CSV generation to match your exact header requirements
+            # Build the CSV for download
             output = io.StringIO()
             output.write('Contractor:,LUVKIN,,,,,,,,,,,,,,,,,\n')
             output.write('Project Name:,PRENTISS CO L/H,,,,,,,,,,,,,,,,,\n')
-            # This is your exact header line with the correct number of commas
+            # The exact header line for Excel:
             output.write('Date,Ticket,Truck ID,Driver Name,1= HANGER / LEANER DIAMETER,$35.00,$80.00,$150.00,$175.00,$250.00,Sub Total,,, $40.00 ,$100.00,$175.00,$200.00,$275.00,TLM Total\n')
             
-            # Write data rows without the dataframe header
+            # Export data without the temp display headers
             df.to_csv(output, index=False, header=False)
             
-            st.download_button("📥 Download Master Log CSV", output.getvalue(), "MasterLog.csv", "text/csv")
+            st.download_button(
+                label="📥 Download Master Log CSV",
+                data=output.getvalue(),
+                file_name="MasterLog_Output.csv",
+                mime="text/csv"
+            )

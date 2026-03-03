@@ -1,98 +1,132 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
-from pdf2image import convert_from_bytes
-from gradio_client import Client, handle_file
 import io
-import re
-import os
 
-# --- PRODUCTION CONFIG ---
-# Update this with your actual HF Space URL
-HF_SPACE_URL = "https://your-username-your-space.hf.space/" 
+st.set_page_config(page_title="Puter AI Ticket Processor", layout="wide")
 
-st.set_page_config(page_title="Ticket Master Pro", layout="wide")
+st.title("🌲 Puter.js + Streamlit: Ticket AI")
+st.write("This app uses Puter's browser-based AI to process scanned tickets.")
 
-def get_ai_data(img_pil):
-    try:
-        client = Client(HF_SPACE_URL)
-        # Save temp image for the AI to read
-        img_path = "temp_page.png"
-        img_pil.save(img_path)
-        
-        result = client.predict(
-            image=handle_file(img_path),
-            api_name="/predict"
-        )
-        return str(result)
-    except Exception as e:
-        return f"ERROR: {str(e)}"
-
-def extract_logic(text):
-    # Specialized Regex for the "Unit Rate Ticket" format
-    data = {
-        "id": re.search(r'(\d{9})', text).group(1) if re.search(r'(\d{9})', text) else "N/A",
-        "date": re.search(r'(\d{2}/\d{2}/\d{4})', text).group(1) if re.search(r'(\d{2}/\d{2}/\d{4})', text) else "N/A",
-        "type": "HANGER" if "HANGER" in text.upper() else "LEANER"
-    }
+# 1. We create the JavaScript/HTML logic for Puter.js
+# This will be embedded as an iframe inside Streamlit
+puter_component = """
+<div id="puter-root" style="background-color: #1e1e1e; color: white; padding: 20px; font-family: sans-serif; border-radius: 10px;">
+    <script src="https://js.puter.com/v2/"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     
-    # Look for the Measure (Handwritten decimal)
-    m_match = re.search(r'Measure\s*[:\s]*([\d.]+)', text, re.I)
-    data["measure"] = float(m_match.group(1)) if m_match else 0.0
-    return data
+    <div style="text-align: center; border: 2px dashed #444; padding: 20px;">
+        <input type="file" id="pdf-file" accept="application/pdf" style="margin-bottom: 10px;"><br>
+        <button id="process-btn" style="background-color: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+            🚀 Analyze with Puter AI
+        </button>
+    </div>
+    <p id="status" style="color: #ffc107; margin-top: 10px;"></p>
+    <pre id="output" style="background: #000; padding: 10px; font-size: 12px; max-height: 200px; overflow-y: auto; border-radius: 5px; display: none;"></pre>
+</div>
 
-def build_row(item):
-    # The Exact 19-Column Master Log Structure
-    row = [" $- " for _ in range(19)]
-    row[0], row[1], row[2], row[3] = item['date'], item['id'], "848117", "Fernando"
-    row[11], row[12] = "", "" # Gaps
+<script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
     
-    m = item['measure']
-    if item['type'] == "HANGER":
-        row[4], row[5], row[10], row[13], row[18] = "1", " $35.00 ", " $35.00 ", " $40.00 ", " $40.00 "
-    else:
-        row[4] = str(m)
-        if 0.01 <= m <= 23.99:
-            row[6], row[10], row[14], row[18] = " $80.00 ", " $80.00 ", " $100.00 ", " $100.00 "
-        elif 24.0 <= m <= 35.99:
-            row[7], row[10], row[15], row[18] = " $150.00 ", " $150.00 ", " $175.00 ", " $175.00 "
-        elif 36.0 <= m <= 47.99:
-            row[8], row[10], row[16], row[18] = " $175.00 ", " $175.00 ", " $200.00 ", " $200.00 "
-        elif m >= 48.0:
-            row[9], row[10], row[17], row[18] = " $250.00 ", " $250.00 ", " $275.00 ", " $275.00 "
-    return row
+    const status = document.getElementById('status');
+    const output = document.getElementById('output');
+    const processBtn = document.getElementById('process-btn');
+    
+    processBtn.onclick = async () => {
+        const fileInput = document.getElementById('pdf-file');
+        if (!fileInput.files.length) {
+            status.innerText = "Please select a PDF first.";
+            return;
+        }
 
-# --- APP UI ---
-st.title("🌲 Master Log Production AI")
-st.info("Using Microsoft Florence-2 Transformer for high-accuracy ticket parsing.")
+        status.innerText = "Initializing Puter AI...";
+        const file = fileInput.files[0];
+        const reader = new FileReader();
 
-uploaded_file = st.file_uploader("Upload PDF Tickets", type="pdf")
+        reader.onload = async function() {
+            const typedarray = new Uint8Array(this.result);
+            const pdf = await pdfjsLib.getDocument(typedarray).promise;
+            let results = [];
 
-if uploaded_file:
-    if st.button("🚀 Process Tickets"):
-        with st.spinner("Converting PDF..."):
-            images = convert_from_bytes(uploaded_file.read(), dpi=200)
-        
-        all_rows = []
-        progress_bar = st.progress(0)
-        
-        for i, img in enumerate(images):
-            with st.spinner(f"AI analyzing page {i+1} of {len(images)}..."):
-                raw_text = get_ai_data(img)
-                if "ERROR" in raw_text:
-                    st.error(raw_text)
-                    break
+            for (let i = 1; i <= pdf.numPages; i++) {
+                status.innerText = `AI is looking at page ${i} of ${pdf.numPages}...`;
                 
-                parsed = extract_logic(raw_text)
-                all_rows.append(build_row(parsed))
-                progress_bar.progress((i + 1) / len(images))
+                // Convert PDF Page to Image
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({scale: 1.5});
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                await page.render({canvasContext: context, viewport: viewport}).promise;
+                
+                const base64Image = canvas.toDataURL('image/jpeg', 0.8);
 
-        if all_rows:
-            cols = ["Date", "Ticket", "Truck ID", "Driver", "Measure", "S35", "S80", "S150", "S175", "S250", "SubTotal", "G1", "G2", "T40", "T100", "T175", "T200", "T275", "TLMTotal"]
-            df = pd.DataFrame(all_rows, columns=cols)
-            st.success("Extraction Complete.")
-            st.dataframe(df)
+                // Call Puter AI Vision
+                try {
+                    const response = await puter.ai.chat(
+                        "Return ONLY a JSON object for this debris ticket: {\\"date\\":\\"MM/DD/YYYY\\", \\"id\\":\\"ticket_number\\", \\"type\\":\\"HANGER/LEANER\\", \\"measure\\": 0.0}",
+                        base64Image
+                    );
+                    
+                    const cleanJson = response.message.content.replace(/```json|```/g, "").trim();
+                    results.push(JSON.parse(cleanJson));
+                } catch (err) {
+                    console.error("AI Page Error:", err);
+                }
+            }
 
-            csv_io = io.StringIO()
-            csv_io.write('Contractor:,LUVKIN,,,,,,,,,,,,,,,,,\nProject Name:,PRENTISS CO L/H,,,,,,,,,,,,,,,,,\nDate,Ticket,Truck ID,Driver Name,1= HANGER / LEANER DIAMETER,$35.00,$80.00,$150.00,$175.00,$250.00,Sub Total,,, $40.00 ,$100.00,$175.00,$200.00,$275.00,TLM Total\n')
-            df.to_csv(csv_io, index=False, header=False)
-            st.download_button("📥 Download Final Master Log", csv_io.getvalue(), "MasterLog_Final.csv")
+            // Send data back to Streamlit or handle it here
+            status.innerText = "✅ Analysis Complete!";
+            output.style.display = "block";
+            output.innerText = JSON.stringify(results, null, 2);
+            
+            // Trigger a custom event to notify Streamlit if needed
+            // For now, we will handle CSV generation directly in the browser for speed
+            generateCSV(results);
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
+    function generateCSV(data) {
+        let csv = "Contractor:,LUVKIN,,,,,,,,,,,,,,,,,\\nProject Name:,PRENTISS CO L/H,,,,,,,,,,,,,,,,,\\nDate,Ticket,Truck ID,Driver Name,1= HANGER / LEANER DIAMETER,$35.00,$80.00,$150.00,$175.00,$250.00,Sub Total,,, $40.00 ,$100.00,$175.00,$200.00,$275.00,TLM Total\\n";
+        
+        data.forEach(item => {
+            let row = Array(19).fill(" $- ");
+            row[0] = item.date; row[1] = item.id; row[2] = "848117"; row[3] = "Fernando";
+            row[11] = ""; row[12] = "";
+
+            let m = parseFloat(item.measure) || 0;
+            if (item.type.toUpperCase().includes("HANGER")) {
+                row[4] = "1";
+                row[5] = " $35.00 "; row[10] = " $35.00 "; row[13] = " $40.00 "; row[18] = " $40.00 ";
+            } else {
+                row[4] = m;
+                if (m > 0 && m <= 23.99) { row[6] = " $80.00 "; row[10] = " $80.00 "; row[14] = " $100.00 "; row[18] = " $100.00 "; }
+                else if (m >= 24 && m <= 35.99) { row[7] = " $150.00 "; row[10] = " $150.00 "; row[15] = " $175.00 "; row[18] = " $175.00 "; }
+                else if (m >= 36 && m <= 47.99) { row[8] = " $175.00 "; row[10] = " $175.00 "; row[16] = " $200.00 "; row[18] = " $200.00 "; }
+                else if (m >= 48) { row[9] = " $250.00 "; row[10] = " $250.00 "; row[17] = " $275.00 "; row[18] = " $275.00 "; }
+            }
+            csv += row.join(",") + "\\n";
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'MasterLog_Output.csv';
+        a.click();
+    }
+</script>
+"""
+
+# 2. Render the component in Streamlit
+components.html(puter_component, height=600, scrolling=True)
+
+st.markdown("""
+---
+### How it works:
+1. **Local Processing:** The PDF is rendered in your browser. 
+2. **Puter AI:** The images are sent to Puter's multimodal AI model (no API key required in code).
+3. **CSV Export:** The range sorting logic ($80, $150, etc.) is calculated instantly and the CSV is downloaded directly to your computer.
+""")

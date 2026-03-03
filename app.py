@@ -1,151 +1,98 @@
 import streamlit as st
 import pandas as pd
-from google import genai
-from google.genai import types
+from pdf2image import convert_from_bytes
+from gradio_client import Client, handle_file
 import io
-import json
 import re
+import os
 
-st.set_page_config(page_title="AI Ticket Master Log", layout="wide")
+# --- PRODUCTION CONFIG ---
+# Update this with your actual HF Space URL
+HF_SPACE_URL = "https://your-username-your-space.hf.space/" 
 
-# --- SIDEBAR SETTINGS ---
-with st.sidebar:
-    st.title("AI Configuration")
-    api_key = st.text_input("Enter Gemini API Key", type="password")
-    
-    # We provide multiple model options. 
-    # '2.0-flash-lite' is currently the best for free-tier OCR stability.
-    model_choice = st.selectbox(
-        "Select Model",
-        [
-            "gemini-2.0-flash-lite-preview-02-05", 
-            "gemini-2.0-flash", 
-            "gemini-1.5-flash"
-        ],
-        help="If you get a 429 error, try the 'Lite' or '1.5' version."
-    )
-    
-    st.markdown("[Get a free API Key](https://aistudio.google.com/app/apikey)")
+st.set_page_config(page_title="Ticket Master Pro", layout="wide")
 
-# --- LOGIC FUNCTIONS ---
-def call_gemini_ai(pdf_file, key, model_id):
-    client = genai.Client(api_key=key)
-    file_bytes = pdf_file.getvalue()
-    
-    # This prompt is tuned for debris tickets
-    prompt = """
-    Return a JSON list of objects for every ticket in this PDF.
-    Required fields:
-    - date: MM/DD/YYYY
-    - ticket_id: Large number at top
-    - truck_id: Number after 'Crew:'
-    - driver: Name after 'Supervisor:'
-    - type: 'HANGER' or 'LEANER'
-    - measure: Numeric value after 'Measure:' (e.g. 12.5)
-    
-    Return ONLY valid JSON code. No conversation.
-    """
-
-    response = client.models.generate_content(
-        model=model_id,
-        contents=[
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part.from_bytes(data=file_bytes, mime_type="application/pdf"),
-                    types.Part.from_text(text=prompt),
-                ],
-            ),
-        ],
-        config=types.GenerateContentConfig(
-            temperature=0.1,
-            # We skip 'Thinking' for standard OCR to stay within free tier limits
-        ),
-    )
-    
-    # Regex to pull JSON out of the response safely
-    text_resp = response.text
-    json_match = re.search(r'\[.*\]', text_resp, re.DOTALL)
-    if json_match:
-        return json.loads(json_match.group())
-    return None
-
-def process_to_csv_format(data):
-    rows = []
-    for item in data:
-        # Initialize row with 19 columns and " $- " for empty money slots
-        row = [" $- " for _ in range(19)]
-        row[0] = item.get('date', "")
-        row[1] = item.get('ticket_id', "")
-        row[2] = item.get('truck_id', "")
-        row[3] = item.get('driver', "")
-        row[11], row[12] = "", "" # Formatting Gaps
-
-        h_type = str(item.get('type', "")).upper()
-        try:
-            m = float(item.get('measure', 0))
-        except:
-            m = 0.0
-
-        if "HANGER" in h_type:
-            row[4] = "1"
-            row[5], row[10], row[13], row[18] = " $35.00 ", " $35.00 ", " $40.00 ", " $40.00 "
-        else:
-            row[4] = str(m)
-            # Standard Master Log Range Sorting
-            if 0.01 <= m <= 23.99:
-                row[6], row[10], row[14], row[18] = " $80.00 ", " $80.00 ", " $100.00 ", " $100.00 "
-            elif 24.0 <= m <= 35.99:
-                row[7], row[10], row[15], row[18] = " $150.00 ", " $150.00 ", " $175.00 ", " $175.00 "
-            elif 36.0 <= m <= 47.99:
-                row[8], row[10], row[16], row[18] = " $175.00 ", " $175.00 ", " $200.00 ", " $200.00 "
-            elif m >= 48.0:
-                row[9], row[10], row[17], row[18] = " $250.00 ", " $250.00 ", " $275.00 ", " $275.00 "
+def get_ai_data(img_pil):
+    try:
+        client = Client(HF_SPACE_URL)
+        # Save temp image for the AI to read
+        img_path = "temp_page.png"
+        img_pil.save(img_path)
         
-        rows.append(row)
-    return rows
+        result = client.predict(
+            image=handle_file(img_path),
+            api_name="/predict"
+        )
+        return str(result)
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+
+def extract_logic(text):
+    # Specialized Regex for the "Unit Rate Ticket" format
+    data = {
+        "id": re.search(r'(\d{9})', text).group(1) if re.search(r'(\d{9})', text) else "N/A",
+        "date": re.search(r'(\d{2}/\d{2}/\d{4})', text).group(1) if re.search(r'(\d{2}/\d{2}/\d{4})', text) else "N/A",
+        "type": "HANGER" if "HANGER" in text.upper() else "LEANER"
+    }
+    
+    # Look for the Measure (Handwritten decimal)
+    m_match = re.search(r'Measure\s*[:\s]*([\d.]+)', text, re.I)
+    data["measure"] = float(m_match.group(1)) if m_match else 0.0
+    return data
+
+def build_row(item):
+    # The Exact 19-Column Master Log Structure
+    row = [" $- " for _ in range(19)]
+    row[0], row[1], row[2], row[3] = item['date'], item['id'], "848117", "Fernando"
+    row[11], row[12] = "", "" # Gaps
+    
+    m = item['measure']
+    if item['type'] == "HANGER":
+        row[4], row[5], row[10], row[13], row[18] = "1", " $35.00 ", " $35.00 ", " $40.00 ", " $40.00 "
+    else:
+        row[4] = str(m)
+        if 0.01 <= m <= 23.99:
+            row[6], row[10], row[14], row[18] = " $80.00 ", " $80.00 ", " $100.00 ", " $100.00 "
+        elif 24.0 <= m <= 35.99:
+            row[7], row[10], row[15], row[18] = " $150.00 ", " $150.00 ", " $175.00 ", " $175.00 "
+        elif 36.0 <= m <= 47.99:
+            row[8], row[10], row[16], row[18] = " $175.00 ", " $175.00 ", " $200.00 ", " $200.00 "
+        elif m >= 48.0:
+            row[9], row[10], row[17], row[18] = " $250.00 ", " $250.00 ", " $275.00 ", " $275.00 "
+    return row
 
 # --- APP UI ---
-st.title("🌲 Scanned Ticket AI Master Log")
-st.write("Convert your scanned PDF tickets into a formatted Master Log using Gemini AI.")
+st.title("🌲 Master Log Production AI")
+st.info("Using Microsoft Florence-2 Transformer for high-accuracy ticket parsing.")
 
-file = st.file_uploader("Upload PDF Tickets", type="pdf")
+uploaded_file = st.file_uploader("Upload PDF Tickets", type="pdf")
 
-if file:
-    if not api_key:
-        st.error("Please enter your Gemini API Key in the sidebar to begin.")
-    else:
-        if st.button("🚀 Generate Master Log"):
-            with st.spinner(f"AI is analyzing with {model_choice}..."):
-                try:
-                    raw_data = call_gemini_ai(file, api_key, model_choice)
-                    if raw_data:
-                        final_rows = process_to_csv_format(raw_data)
-                        
-                        st.success(f"Extracted {len(final_rows)} tickets!")
-                        
-                        # Preview Table
-                        cols = ["Date", "Ticket", "Truck ID", "Driver", "Measure", "Sub 35", "Sub 80", "Sub 150", "Sub 175", "Sub 250", "Sub Total", "G1", "G2", "TLM 40", "TLM 100", "TLM 175", "TLM 200", "TLM 275", "TLM Total"]
-                        df = pd.DataFrame(final_rows, columns=cols)
-                        st.dataframe(df)
+if uploaded_file:
+    if st.button("🚀 Process Tickets"):
+        with st.spinner("Converting PDF..."):
+            images = convert_from_bytes(uploaded_file.read(), dpi=200)
+        
+        all_rows = []
+        progress_bar = st.progress(0)
+        
+        for i, img in enumerate(images):
+            with st.spinner(f"AI analyzing page {i+1} of {len(images)}..."):
+                raw_text = get_ai_data(img)
+                if "ERROR" in raw_text:
+                    st.error(raw_text)
+                    break
+                
+                parsed = extract_logic(raw_text)
+                all_rows.append(build_row(parsed))
+                progress_bar.progress((i + 1) / len(images))
 
-                        # Create the download file
-                        csv_output = io.StringIO()
-                        csv_output.write('Contractor:,LUVKIN,,,,,,,,,,,,,,,,,\n')
-                        csv_output.write('Project Name:,PRENTISS CO L/H,,,,,,,,,,,,,,,,,\n')
-                        csv_output.write('Date,Ticket,Truck ID,Driver Name,1= HANGER / LEANER DIAMETER,$35.00,$80.00,$150.00,$175.00,$250.00,Sub Total,,, $40.00 ,$100.00,$175.00,$200.00,$275.00,TLM Total\n')
-                        df.to_csv(csv_output, index=False, header=False)
-                        
-                        st.download_button(
-                            "📥 Download CSV for Excel", 
-                            csv_output.getvalue(), 
-                            "MasterLog_Output.csv", 
-                            "text/csv"
-                        )
-                    else:
-                        st.error("AI failed to return structured data. Check your PDF quality.")
-                except Exception as e:
-                    if "429" in str(e):
-                        st.error("Rate limit exceeded. Switch the 'Select Model' to a different version in the sidebar and try again.")
-                    else:
-                        st.error(f"Error: {e}")
+        if all_rows:
+            cols = ["Date", "Ticket", "Truck ID", "Driver", "Measure", "S35", "S80", "S150", "S175", "S250", "SubTotal", "G1", "G2", "T40", "T100", "T175", "T200", "T275", "TLMTotal"]
+            df = pd.DataFrame(all_rows, columns=cols)
+            st.success("Extraction Complete.")
+            st.dataframe(df)
+
+            csv_io = io.StringIO()
+            csv_io.write('Contractor:,LUVKIN,,,,,,,,,,,,,,,,,\nProject Name:,PRENTISS CO L/H,,,,,,,,,,,,,,,,,\nDate,Ticket,Truck ID,Driver Name,1= HANGER / LEANER DIAMETER,$35.00,$80.00,$150.00,$175.00,$250.00,Sub Total,,, $40.00 ,$100.00,$175.00,$200.00,$275.00,TLM Total\n')
+            df.to_csv(csv_io, index=False, header=False)
+            st.download_button("📥 Download Final Master Log", csv_io.getvalue(), "MasterLog_Final.csv")

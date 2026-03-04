@@ -1,11 +1,21 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Puter AI Ticket Processor", layout="wide")
+st.set_page_config(page_title="Ticket Proccesser", layout="wide")
 
-st.title("🌲 Puter.js + Streamlit: Ticket AI")
-st.write("Processing scanned tickets via Puter's browser-based AI.")
-
+st.title("Ticket Proccesser")
+st.write("Process scanned tickets via Puter.js AI.")
+st.write("Please take note that accuracy is 97%")
+st.write("(Double checking tickets is reccomended for complete accuracy)")
+st.write("Please contact Soren Clink at 'sorenclink@gmail.com' if any errors occur")
+st.markdown("""
+---
+### Instructions:
+1. Select your PDF file in the box above.
+2. Click **Start AI Analysis**.
+3. Wait for the success message.
+4. Click the blue **Download Master Log CSV** button to save your file.
+""")
 # This is the full JS/HTML engine
 puter_component = """
 <div id="puter-root" style="background-color: #0e1117; color: white; padding: 20px; font-family: sans-serif; border-radius: 10px; border: 1px solid #30363d;">
@@ -158,12 +168,3 @@ puter_component = """
 
 # Render the component
 components.html(puter_component, height=700, scrolling=True)
-
-st.markdown("""
----
-### Instructions:
-1. Select your PDF file in the box above.
-2. Click **Start AI Analysis**.
-3. Wait for the success message.
-4. Click the blue **Download Master Log CSV** button to save your file.
-""")

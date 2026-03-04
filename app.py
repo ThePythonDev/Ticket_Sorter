@@ -4,6 +4,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Glyphon", layout="wide")
 st.write("© Copyright Soren Clink 2026 all rights reserved")
 st.title("Glyphon Ticket Proccesser")
+st.write("Only one or two poeple should be using the app at a time do to streamlit limits")
 st.write("Process scanned tickets via Puter.js AI.")
 st.write("Please take note that accuracy is 97%")
 st.write("(Double checking tickets is reccomended for complete accuracy)")

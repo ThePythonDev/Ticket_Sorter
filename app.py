@@ -3,95 +3,83 @@ import streamlit.components.v1 as components
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Glyphon | AI Ticket Processing",
-    page_icon="📄",
+    page_title="Glyphon | Ticket Processor",
+    page_icon="📋",
     layout="wide",
-    initial_sidebar_state="expanded"
 )
 
-# --- CUSTOM CSS ---
+# --- CUSTOM CSS FOR POLISH ---
 st.markdown("""
     <style>
-    .main {
-        background-color: #0e1117;
-    }
-    .stAlert {
-        border-radius: 10px;
-    }
-    footer {
-        visibility: hidden;
-    }
-    .small-font {
-        font-size: 12px;
-        color: #8b949e;
-    }
+    .main { background-color: #0e1117; }
+    div[data-testid="stMetricValue"] { font-size: 24px; }
+    .footer-text { font-size: 12px; color: #8b949e; margin-top: 50px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR / SYSTEM INFO ---
+# --- SIDEBAR: SUPPORT & STATUS ---
 with st.sidebar:
     st.title("Glyphon")
-    st.subheader("System Status")
-    st.info("🟢 System Operational")
+    st.success("✨ System is active")
     
-    st.markdown("### 📋 Guidelines")
-    st.markdown("""
-    - **Session Limit:** To maintain optimal performance, it is recommended that 1-2 users operate the tool concurrently.
-    - **Accuracy:** The AI extraction model maintains a **~97% accuracy rate**. 
-    - **Quality Assurance:** Manual verification of the generated CSV is required for financial compliance.
-    """)
+    with st.expander("Usage Notes", expanded=True):
+        st.write("""
+        **User Limit:** To ensure the best performance for everyone, we recommend only one or two people process tickets at the same time.
+        
+        **Quality Check:** Our AI reaches about 97% accuracy. While it's a huge time-saver, a quick human review of the final CSV is always recommended for total precision.
+        """)
     
     st.divider()
-    st.markdown("### 🛠 Support")
-    st.write("For technical issues or feature requests, please contact:")
-    st.caption("Soren Clink")
+    st.markdown("### Need assistance?")
+    st.write("If you run into any issues, I am always happy to help!")
     st.caption("sorenclink@gmail.com")
     
     st.divider()
-    st.markdown('<p class="small-font">© 2026 Soren Clink. All rights reserved.</p>', unsafe_allow_html=True)
+    st.markdown('<p class="footer-text">© 2026 Soren Clink<br>All rights reserved.</p>', unsafe_allow_html=True)
 
 # --- MAIN INTERFACE ---
-st.title("Debris Ticket Processor")
-st.markdown("Automated extraction of scanned ticket data via Puter.js Vision AI.")
+st.title("Glyphon")
+st.markdown("Upload your scanned PDF tickets below. AI will read the tickets and prepare a CSV.")
 
-# Process Flow Overview
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Step 1", "Upload PDF")
-col2.metric("Step 2", "AI Analysis")
-col3.metric("Step 3", "Review Data")
-col4.metric("Step 4", "Export CSV")
+# Process Steps
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Step 1", "Upload PDF")
+with col2:
+    st.metric("Step 2", "AI Review")
+with col3:
+    st.metric("Step 3", "Download CSV")
 
 st.divider()
 
-# --- THE PROCESSING ENGINE (JS/HTML) ---
-# I have enhanced the CSS for a more "Enterprise" look
+# --- THE PROCESSING ENGINE ---
 puter_component = """
-<div id="puter-root" style="background-color: #161b22; color: #e6edf3; padding: 30px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; border-radius: 12px; border: 1px solid #30363d; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+<div id="puter-root" style="background-color: #161b22; color: #e6edf3; padding: 30px; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; border-radius: 12px; border: 1px solid #30363d;">
     <script src="https://js.puter.com/v2/"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     
-    <div style="text-align: center; border: 2px dashed #484f58; padding: 40px; border-radius: 8px; background: #0d1117; transition: border-color 0.3s ease;">
-        <p style="margin-top: 0; font-weight: 500; color: #8b949e;">Select Scanned Ticket PDF (Multi-page supported)</p>
-        <input type="file" id="pdf-file" accept="application/pdf" style="margin-bottom: 20px; font-size: 14px;"><br>
-        <button id="process-btn" style="background-color: #238636; color: white; border: none; padding: 12px 32px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 15px; transition: background-color 0.2s;">
-            Initialize AI Analysis
+    <div style="text-align: center; border: 2px dashed #484f58; padding: 40px; border-radius: 12px; background: #0d1117;">
+        <p style="margin-top: 0; font-size: 16px; color: #c9d1d9;">Select the PDF file you'd like to process</p>
+        <input type="file" id="pdf-file" accept="application/pdf" style="margin-bottom: 25px; color: #8b949e;"><br>
+        <button id="process-btn" style="background-color: #238636; color: white; border: none; padding: 14px 40px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 16px; box-shadow: 0 2px 0 rgba(0,0,0,0.2);">
+            Analyze PDF Tickets
         </button>
     </div>
     
-    <div id="status-area" style="margin-top: 20px; text-align: center;">
-        <p id="status" style="color: #d29922; font-size: 14px; font-weight: 500;"></p>
+    <div id="status-area" style="margin-top: 25px; text-align: center;">
+        <p id="status" style="color: #d29922; font-size: 15px; font-weight: 500;"></p>
     </div>
     
-    <div id="download-container" style="display: none; margin-top: 25px; padding: 25px; background: #21262d; border-radius: 8px; text-align: center; border: 1px solid #3fab4e;">
-        <p style="margin: 0 0 15px 0; color: #3fab4e; font-weight: 600; font-size: 16px;">✓ Extraction Completed Successfully</p>
-        <button id="download-csv-btn" style="background-color: #1f6feb; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: background-color 0.2s;">
-            💾 Download Processed Data (CSV)
+    <div id="download-container" style="display: none; margin-top: 25px; padding: 25px; background: rgba(56, 139, 253, 0.1); border-radius: 12px; text-align: center; border: 1px solid #388bfd;">
+        <p style="margin: 0 0 15px 0; color: #58a6ff; font-weight: 600; font-size: 16px;">Success! Your data is ready for export.</p>
+        <button id="download-csv-btn" style="background-color: #1f6feb; color: white; border: none; padding: 12px 28px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 15px;">
+            Download CSV Spreadsheet
         </button>
     </div>
 
-    <details style="margin-top: 25px; border-top: 1px solid #30363d; padding-top: 15px;">
-        <summary style="color: #8b949e; font-size: 13px; cursor: pointer; user-select: none;">Show Data Inspection (JSON)</summary>
-        <pre id="output" style="background: #010409; padding: 15px; font-size: 12px; max-height: 200px; overflow-y: auto; border-radius: 6px; margin-top: 10px; border: 1px solid #30363d; color: #7ee787; font-family: monospace;"></pre>
+    <details style="margin-top: 30px; border-top: 1px solid #30363d; padding-top: 20px;">
+        <summary style="color: #8b949e; font-size: 13px; cursor: pointer; opacity: 0.8;">Data Preview (Raw JSON)</summary>
+        <pre id="output" style="background: #010409; padding: 15px; font-size: 12px; max-height: 200px; overflow-y: auto; border-radius: 8px; margin-top: 10px; border: 1px solid #30363d; color: #7ee787;"></pre>
     </details>
 </div>
 
@@ -109,13 +97,13 @@ puter_component = """
     processBtn.onclick = async () => {
         const fileInput = document.getElementById('pdf-file');
         if (!fileInput.files.length) {
-            status.innerText = "⚠️ Please select a valid PDF file to continue.";
+            status.innerText = "Please select a PDF file to begin.";
             return;
         }
 
         processBtn.disabled = true;
-        processBtn.style.opacity = "0.5";
-        processBtn.innerText = "Processing...";
+        processBtn.style.opacity = "0.6";
+        processBtn.innerText = "Reading file...";
         downloadContainer.style.display = "none";
         processedData = [];
         
@@ -128,7 +116,7 @@ puter_component = """
                 const pdf = await pdfjsLib.getDocument(typedarray).promise;
                 
                 for (let i = 1; i <= pdf.numPages; i++) {
-                    status.innerHTML = `<span style="color: #58a6ff;">●</span> AI is analyzing page ${i} of ${pdf.numPages}...`;
+                    status.innerHTML = `Processing page ${i} of ${pdf.numPages}...`;
                     
                     const page = await pdf.getPage(i);
                     const viewport = page.getViewport({scale: 2.0});
@@ -154,10 +142,10 @@ puter_component = """
                 downloadContainer.style.display = "block";
                 processBtn.disabled = false;
                 processBtn.style.opacity = "1";
-                processBtn.innerText = "Start AI Analysis";
+                processBtn.innerText = "Analyze PDF Tickets";
 
             } catch (err) {
-                status.innerText = "❌ Analysis failed. Please ensure the PDF is not password protected.";
+                status.innerText = "We hit a snag reading the PDF. Please try again or check the file.";
                 console.error(err);
                 processBtn.disabled = false;
                 processBtn.style.opacity = "1";
@@ -211,7 +199,7 @@ puter_component = """
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
         link.setAttribute("href", url);
-        link.setAttribute("download", `Processed_Tickets_${new Date().toLocaleDateString()}.csv`);
+        link.setAttribute("download", `Processed_Tickets_Export.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();

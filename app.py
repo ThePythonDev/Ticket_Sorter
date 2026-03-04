@@ -1,9 +1,9 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Ticket Proccesser", layout="wide")
+st.set_page_config(page_title="Glyphon", layout="wide")
 
-st.title("Ticket Proccesser")
+st.title("Glyphon Ticket Proccesser")
 st.write("Process scanned tickets via Puter.js AI.")
 st.write("Please take note that accuracy is 97%")
 st.write("(Double checking tickets is reccomended for complete accuracy)")
@@ -14,7 +14,7 @@ st.markdown("""
 1. Select your PDF file in the box above.
 2. Click **Start AI Analysis**.
 3. Wait for the success message.
-4. Click the blue **Download Master Log CSV** button to save your file.
+4. Click the blue **Download CSV spreadsheet** button to save your file.
 """)
 # This is the full JS/HTML engine
 puter_component = """
@@ -25,7 +25,7 @@ puter_component = """
     <div style="text-align: center; border: 2px dashed #444; padding: 30px; border-radius: 10px; background: #161b22;">
         <input type="file" id="pdf-file" accept="application/pdf" style="margin-bottom: 15px; color: #8b949e;"><br>
         <button id="process-btn" style="background-color: #238636; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px;">
-            🚀 Start AI Analysis
+            Start AI Analysis
         </button>
     </div>
     
@@ -34,7 +34,7 @@ puter_component = """
     <div id="download-container" style="display: none; margin-top: 20px; padding: 20px; background: #21262d; border-radius: 8px; text-align: center;">
         <p style="margin-bottom: 15px; color: #7ee787;">✅ Analysis Complete!</p>
         <button id="download-csv-btn" style="background-color: #1f6feb; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">
-            📥 Download Master Log CSV
+            Download CSV spreadsheet
         </button>
     </div>
 
@@ -76,7 +76,7 @@ puter_component = """
                 const pdf = await pdfjsLib.getDocument(typedarray).promise;
                 
                 for (let i = 1; i <= pdf.numPages; i++) {
-                    status.innerText = `⏳ AI is analyzing page ${i} of ${pdf.numPages}...`;
+                    status.innerText = `AI is analyzing page ${i} of ${pdf.numPages}...`;
                     
                     const page = await pdf.getPage(i);
                     const viewport = page.getViewport({scale: 2.0});
@@ -157,7 +157,7 @@ puter_component = """
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
         link.setAttribute("href", url);
-        link.setAttribute("download", "MasterLog_Generated.csv");
+        link.setAttribute("download", "_generated.csv");
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -168,3 +168,4 @@ puter_component = """
 
 # Render the component
 components.html(puter_component, height=700, scrolling=True)
+st.write("© Copyright Dreamy Products 2026 all rights reserved")

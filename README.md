@@ -1,1 +1,1 @@
-To run, please go to the releases part on the right side of the webpage (Laptop)
+To run please go to https://ticketapp.streamlit.app/

@@ -7,7 +7,7 @@ st.title("Ticket Proccesser")
 st.write("Process scanned tickets via Puter.js AI.")
 st.write("Please take note that accuracy is 97%")
 st.write("(Double checking tickets is reccomended for complete accuracy)")
-st.write("Please contact Soren Clink at 'sorenclink@gmail.com' if any errors occur")
+st.write("Please contact Soren Clink at sorenclink@gmail.com if any errors occur")
 st.markdown("""
 ---
 ### Instructions:

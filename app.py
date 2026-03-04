@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Glyphon", layout="wide")
-st.write("© Copyright Dreamy Products 2026 all rights reserved")
+st.write("© Copyright Soren Clink 2026 all rights reserved")
 st.title("Glyphon Ticket Proccesser")
 st.write("Process scanned tickets via Puter.js AI.")
 st.write("Please take note that accuracy is 97%")

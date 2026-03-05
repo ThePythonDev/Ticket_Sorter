@@ -1,5 +1,10 @@
 import streamlit as st
-import streamlit.components.v1 as components
+import pandas as pd
+import requests
+import io
+import re
+from pdf2image import convert_from_bytes
+from PIL import Image
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -14,199 +19,154 @@ st.markdown("""
     .main { background-color: #0e1117; }
     div[data-testid="stMetricValue"] { font-size: 24px; }
     .footer-text { font-size: 12px; color: #8b949e; margin-top: 50px; }
+    
+    /* Replicating the Puter-root style for the Python container */
+    .puter-style-container {
+        background-color: #161b22; 
+        color: #e6edf3; 
+        padding: 30px; 
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+        border-radius: 12px; 
+        border: 1px solid #30363d;
+    }
+    .upload-section {
+        text-align: center; 
+        border: 2px dashed #484f58; 
+        padding: 40px; 
+        border-radius: 12px; 
+        background: #0d1117;
+        margin-bottom: 20px;
+    }
+    .stButton>button {
+        background-color: #238636 !important; 
+        color: white !important; 
+        border: none !important; 
+        padding: 14px 40px !important; 
+        border-radius: 6px !important; 
+        font-weight: 600 !important; 
+        font-size: 16px !important;
+    }
+    .status-msg { color: #d29922; font-size: 15px; font-weight: 500; text-align: center; }
+    .success-box {
+        margin-top: 25px; 
+        padding: 25px; 
+        background: rgba(56, 139, 253, 0.1); 
+        border-radius: 12px; 
+        text-align: center; 
+        border: 1px solid #388bfd;
+        color: #58a6ff; 
+        font-weight: 600;
+    }
     </style>
     """, unsafe_allow_html=True)
+
+# --- LOGIC FUNCTIONS (The requested replacement) ---
+def call_easy_ocr_api(image):
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='JPEG')
+    img_bytes = img_byte_arr.getvalue()
+    try:
+        files = {'file': ('image.jpg', img_bytes, 'image/jpeg')}
+        response = requests.post('https://api.easyocr.org/ocr', files=files)
+        if response.status_code == 200:
+            result = response.json()
+            return " ".join(result.get('words', []))
+        return ""
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def extract_fields(text):
+    data = {
+        "id": re.search(r'(\d{9,10})', text).group(1) if re.search(r'(\d{9,10})', text) else "N/A",
+        "date": re.search(r'(\d{2}/\d{2}/\d{4})', text).group(1) if re.search(r'(\d{2}/\d{2}/\d{4})', text) else "N/A",
+        "type": "HANGER" if "HANGER" in text.upper() else "LEANER",
+        "measure": 0.0
+    }
+    m_match = re.search(r'Measure\s*[:\s]*([\d.]+)', text, re.I)
+    if m_match:
+        data["measure"] = float(m_match.group(1))
+    return data
+
+def format_row(item):
+    row = [" $- " for _ in range(19)]
+    row[0], row[1], row[2], row[3] = item['date'], item['id'], "848117", "Fernando"
+    row[11], row[12] = "", "" 
+    m = item['measure']
+    if item['type'] == "HANGER":
+        row[4], row[5], row[10], row[13], row[18] = "1", " $35.00 ", " $35.00 ", " $40.00 ", " $40.00 "
+    else:
+        row[4] = str(m)
+        if 0.01 <= m <= 23.99: row[6], row[10], row[14], row[18] = " $80.00 ", " $80.00 ", " $100.00 ", " $100.00 "
+        elif 24.0 <= m <= 35.99: row[7], row[10], row[15], row[18] = " $150.00 ", " $150.00 ", " $175.00 ", " $175.00 "
+        elif 36.0 <= m <= 47.99: row[8], row[10], row[16], row[18] = " $175.00 ", " $175.00 ", " $200.00 ", " $200.00 "
+        elif m >= 48.0: row[9], row[10], row[17], row[18] = " $250.00 ", " $250.00 ", " $275.00 ", " $275.00 "
+    return row
 
 # --- SIDEBAR: SUPPORT & STATUS ---
 with st.sidebar:
     st.title("Glyphon")
     st.success("✨ System is active")
-    
     with st.expander("Usage Notes", expanded=True):
         st.write("""
         **User Limit:** To ensure the best performance for everyone, we recommend only one or two people process tickets at the same time.
-        
         **Quality Check:** Our AI reaches about 97% accuracy. While it's a huge time-saver, a quick human review of the final CSV is always recommended for total precision.
         """)
-    
     st.divider()
     st.markdown("### Need assistance?")
-    st.write("If you run into any issues, I am always happy to help!")
-    st.caption("sorenclink@gmail.com")
-    
+    st.write("If you run into any issues, I am always happy to help")
+    st.caption("📧 sorenclink@gmail.com")
     st.divider()
     st.markdown('<p class="footer-text">© 2026 Soren Clink<br>All rights reserved.</p>', unsafe_allow_html=True)
 
 # --- MAIN INTERFACE ---
-st.title("Glyphon")
-st.markdown("Upload your scanned PDF tickets below. AI will read the tickets and prepare a CSV.")
+st.title("Ticket Data Entry, Simplified.")
+st.markdown("Upload your scanned PDF tickets below. Our AI will read the details and prepare a CSV for you in seconds.")
 
-# Process Steps
 col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Step 1", "Upload PDF")
-with col2:
-    st.metric("Step 2", "AI Review")
-with col3:
-    st.metric("Step 3", "Download CSV")
+with col1: st.metric("Step 1", "Upload PDF")
+with col2: st.metric("Step 2", "AI Review")
+with col3: st.metric("Step 3", "Download CSV")
 
 st.divider()
 
-# --- THE PROCESSING ENGINE ---
-puter_component = """
-<div id="puter-root" style="background-color: #161b22; color: #e6edf3; padding: 30px; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; border-radius: 12px; border: 1px solid #30363d;">
-    <script src="https://js.puter.com/v2/"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-    
-    <div style="text-align: center; border: 2px dashed #484f58; padding: 40px; border-radius: 12px; background: #0d1117;">
-        <p style="margin-top: 0; font-size: 16px; color: #c9d1d9;">Select the PDF file you'd like to process</p>
-        <input type="file" id="pdf-file" accept="application/pdf" style="margin-bottom: 25px; color: #8b949e;"><br>
-        <button id="process-btn" style="background-color: #238636; color: white; border: none; padding: 14px 40px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 16px; box-shadow: 0 2px 0 rgba(0,0,0,0.2);">
-            Analyze PDF Tickets
-        </button>
-    </div>
-    
-    <div id="status-area" style="margin-top: 25px; text-align: center;">
-        <p id="status" style="color: #d29922; font-size: 15px; font-weight: 500;"></p>
-    </div>
-    
-    <div id="download-container" style="display: none; margin-top: 25px; padding: 25px; background: rgba(56, 139, 253, 0.1); border-radius: 12px; text-align: center; border: 1px solid #388bfd;">
-        <p style="margin: 0 0 15px 0; color: #58a6ff; font-weight: 600; font-size: 16px;">Success! Your data is ready for export.</p>
-        <button id="download-csv-btn" style="background-color: #1f6feb; color: white; border: none; padding: 12px 28px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 15px;">
-            Download CSV Spreadsheet
-        </button>
-    </div>
+# --- THE PROCESSING ENGINE (Styled to match your layout exactly) ---
+st.markdown('<div class="puter-style-container">', unsafe_allow_html=True)
+st.markdown('<div class="upload-section"><p style="color: #c9d1d9;">Select the PDF file you\'d like to process</p>', unsafe_allow_html=True)
+uploaded_file = st.file_uploader("", type="pdf", label_visibility="collapsed")
+st.markdown('</div>', unsafe_allow_html=True)
 
-    <details style="margin-top: 30px; border-top: 1px solid #30363d; padding-top: 20px;">
-        <summary style="color: #8b949e; font-size: 13px; cursor: pointer; opacity: 0.8;">Data Preview (Raw JSON)</summary>
-        <pre id="output" style="background: #010409; padding: 15px; font-size: 12px; max-height: 200px; overflow-y: auto; border-radius: 8px; margin-top: 10px; border: 1px solid #30363d; color: #7ee787;"></pre>
-    </details>
-</div>
-
-<script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-    
-    const status = document.getElementById('status');
-    const output = document.getElementById('output');
-    const processBtn = document.getElementById('process-btn');
-    const downloadContainer = document.getElementById('download-container');
-    const downloadCsvBtn = document.getElementById('download-csv-btn');
-    
-    let processedData = [];
-
-    processBtn.onclick = async () => {
-        const fileInput = document.getElementById('pdf-file');
-        if (!fileInput.files.length) {
-            status.innerText = "Please select a PDF file to begin.";
-            return;
-        }
-
-        processBtn.disabled = true;
-        processBtn.style.opacity = "0.6";
-        processBtn.innerText = "Reading file...";
-        downloadContainer.style.display = "none";
-        processedData = [];
+if uploaded_file:
+    if st.button("Analyze PDF Tickets"):
+        status_placeholder = st.empty()
+        all_results = []
         
-        const file = fileInput.files[0];
-        const reader = new FileReader();
-
-        reader.onload = async function() {
-            try {
-                const typedarray = new Uint8Array(this.result);
-                const pdf = await pdfjsLib.getDocument(typedarray).promise;
-                
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    status.innerHTML = `Processing page ${i} of ${pdf.numPages}...`;
-                    
-                    const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({scale: 2.0});
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    await page.render({canvasContext: context, viewport: viewport}).promise;
-                    
-                    const base64Image = canvas.toDataURL('image/jpeg', 0.8);
-
-                    const response = await puter.ai.chat(
-                        "Extract debris ticket info. Return ONLY a JSON object: {\\"date\\":\\"MM/DD/YYYY\\", \\"id\\":\\"number\\", \\"type\\":\\"HANGER/LEANER\\", \\"measure\\": 0.0}",
-                        base64Image
-                    );
-                    
-                    const cleanJson = response.message.content.replace(/```json|```/g, "").trim();
-                    processedData.push(JSON.parse(cleanJson));
-                }
-
-                status.innerText = "";
-                output.innerText = JSON.stringify(processedData, null, 2);
-                downloadContainer.style.display = "block";
-                processBtn.disabled = false;
-                processBtn.style.opacity = "1";
-                processBtn.innerText = "Analyze PDF Tickets";
-
-            } catch (err) {
-                status.innerText = "We hit a snag reading the PDF. Please try again or check the file.";
-                console.error(err);
-                processBtn.disabled = false;
-                processBtn.style.opacity = "1";
-                processBtn.innerText = "Retry Analysis";
-            }
-        };
-        reader.readAsArrayBuffer(file);
-    };
-
-    downloadCsvBtn.onclick = () => {
-        let csv = "Contractor:,LUVKIN,,,,,,,,,,,,,,,,,\\nProject Name:,PRENTISS CO L/H,,,,,,,,,,,,,,,,,\\nDate,Ticket,Truck ID,Driver Name,1= HANGER / LEANER DIAMETER,$35.00,$80.00,$150.00,$175.00,$250.00,Sub Total,,, $40.00 ,$100.00,$175.00,$200.00,$275.00,TLM Total\\n";
+        # Logic execution
+        images = convert_from_bytes(uploaded_file.read(), dpi=200)
+        for i, img in enumerate(images):
+            status_placeholder.markdown(f'<p class="status-msg">Processing page {i+1} of {len(images)}...</p>', unsafe_allow_html=True)
+            text = call_easy_ocr_api(img)
+            parsed = extract_fields(text)
+            all_results.append(format_row(parsed))
         
-        processedData.forEach(item => {
-            let row = Array(19).fill(" $- ");
-            row[0] = item.date || ""; 
-            row[1] = item.id || ""; 
-            row[2] = "848117"; 
-            row[3] = "Fernando";
-            row[11] = ""; row[12] = ""; 
+        status_placeholder.empty()
+        
+        if all_results:
+            st.markdown('<div class="success-box">Success! Your data is ready for export.</div>', unsafe_allow_html=True)
+            
+            # Export Logic
+            csv_io = io.StringIO()
+            csv_io.write('Contractor:,LUVKIN,,,,,,,,,,,,,,,,,\nProject Name:,PRENTISS CO L/H,,,,,,,,,,,,,,,,,\nDate,Ticket,Truck ID,Driver Name,1= HANGER / LEANER DIAMETER,$35.00,$80.00,$150.00,$175.00,$250.00,Sub Total,,, $40.00 ,$100.00,$175.00,$200.00,$275.00,TLM Total\n')
+            pd.DataFrame(all_results).to_csv(csv_io, index=False, header=False)
+            
+            st.download_button(
+                label="Download CSV Spreadsheet",
+                data=csv_io.getvalue(),
+                file_name="Processed_Tickets_Export.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+            
+            with st.expander("Data Preview (Raw JSON)"):
+                st.json(all_results)
 
-            let m = parseFloat(item.measure) || 0;
-            let type = (item.type || "").toUpperCase();
-
-            if (type.includes("HANGER")) {
-                row[4] = "1";
-                row[5] = " $35.00 "; row[10] = " $35.00 "; 
-                row[13] = " $40.00 "; row[18] = " $40.00 ";
-            } else {
-                row[4] = m.toString();
-                if (m > 0 && m <= 23.99) { 
-                    row[6] = " $80.00 "; row[10] = " $80.00 "; 
-                    row[14] = " $100.00 "; row[18] = " $100.00 "; 
-                }
-                else if (m >= 24 && m <= 35.99) { 
-                    row[7] = " $150.00 "; row[10] = " $150.00 "; 
-                    row[15] = " $175.00 "; row[18] = " $175.00 "; 
-                }
-                else if (m >= 36 && m <= 47.99) { 
-                    row[8] = " $175.00 "; row[10] = " $175.00 "; 
-                    row[16] = " $200.00 "; row[18] = " $200.00 "; 
-                }
-                else if (m >= 48) { 
-                    row[9] = " $250.00 "; row[10] = " $250.00 "; 
-                    row[17] = " $275.00 "; row[18] = " $275.00 "; 
-                }
-            }
-            csv += row.join(",") + "\\n";
-        });
-
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `Processed_Tickets_Export.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-</script>
-"""
-
-# Render the component
-components.html(puter_component, height=750, scrolling=True)
+st.markdown('</div>', unsafe_allow_html=True)

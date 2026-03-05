@@ -123,7 +123,7 @@ with st.sidebar:
         """)
     st.divider()
     st.markdown("### Need assistance?")
-    st.write("If you run into any issues, Soren is happy to help:")
+    st.write("If you run into any issues, I am happy to help:")
     st.caption("📧 sorenclink@gmail.com")
     st.divider()
     st.markdown('<p class="footer-text">© 2026 Soren Clink<br>All rights reserved.</p>', unsafe_allow_html=True)

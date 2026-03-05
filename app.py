@@ -37,6 +37,15 @@ st.markdown("""
         background: #0d1117;
         margin-bottom: 20px;
     }
+    /* Ensuring the uploader looks good inside the custom box */
+    [data-testid="stFileUploader"] {
+        padding: 0;
+    }
+    [data-testid="stFileUploader"] > section {
+        padding: 0;
+        background-color: transparent;
+        border: none;
+    }
     .stButton>button {
         background-color: #238636 !important; 
         color: white !important; 
@@ -45,6 +54,7 @@ st.markdown("""
         border-radius: 6px !important; 
         font-weight: 600 !important; 
         font-size: 16px !important;
+        width: 100%;
     }
     .status-msg { color: #d29922; font-size: 15px; font-weight: 500; text-align: center; }
     .success-box {
@@ -60,7 +70,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOGIC FUNCTIONS (The requested replacement) ---
+# --- LOGIC FUNCTIONS ---
 def call_easy_ocr_api(image):
     img_byte_arr = io.BytesIO()
     image.save(img_byte_arr, format='JPEG')
@@ -113,7 +123,7 @@ with st.sidebar:
         """)
     st.divider()
     st.markdown("### Need assistance?")
-    st.write("If you run into any issues, I am always happy to help")
+    st.write("If you run into any issues, Soren is happy to help:")
     st.caption("📧 sorenclink@gmail.com")
     st.divider()
     st.markdown('<p class="footer-text">© 2026 Soren Clink<br>All rights reserved.</p>', unsafe_allow_html=True)
@@ -129,9 +139,10 @@ with col3: st.metric("Step 3", "Download CSV")
 
 st.divider()
 
-# --- THE PROCESSING ENGINE (Styled to match your layout exactly) ---
+# --- THE PROCESSING ENGINE ---
 st.markdown('<div class="puter-style-container">', unsafe_allow_html=True)
-st.markdown('<div class="upload-section"><p style="color: #c9d1d9;">Select the PDF file you\'d like to process</p>', unsafe_allow_html=True)
+st.markdown('<div class="upload-section"><p style="color: #c9d1d9;">Drag and drop or select the PDF file you\'d like to process</p>', unsafe_allow_html=True)
+# The file uploader is the "Drag and Drop" zone
 uploaded_file = st.file_uploader("", type="pdf", label_visibility="collapsed")
 st.markdown('</div>', unsafe_allow_html=True)
 

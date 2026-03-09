@@ -2,23 +2,36 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Glyphon", layout="wide")
-st.write("© Copyright Soren Clink 2026 all rights reserved")
-st.title("Glyphon Ticket Proccesser")
-st.write("Only one or two poeple should be using the app at a time do to streamlit limits")
-st.write("Process scanned tickets via Puter.js AI.")
-st.write("Please take note that accuracy is 97%")
-st.write("(Double checking tickets is reccomended for complete accuracy)")
-st.write("Please contact Soren Clink at sorenclink@gmail.com if any errors occur")
-st.markdown("""
----
+
+# Header
+with st.container():
+    st.title("Glyphon Ticket Proccesser")
+    st.write("Only one or two poeple should be using the app at a time do to streamlit limits")
+    st.write("Process scanned tickets via Puter.js AI.")
+    st.write("Please take note that accuracy is 97%")
+    st.write("(Double checking tickets is reccomended for complete accuracy)")
+    st.write("Please contact Soren Clink at sorenclink@gmail.com if any errors occur")
+
+st.markdown("---")
+
+# Instructions section
+with st.container():
+    st.markdown("""
 ### Instructions:
 1. Select your PDF file in the box above.
 2. Click **Start AI Analysis**.
 3. Wait for the success message.
 4. Click the blue **Download CSV spreadsheet** button to save your file.
 """)
-# This is the full JS/HTML engine
-puter_component = """
+
+st.markdown("---")
+
+# Centered component layout
+col1, col2, col3 = st.columns([1,4,1])
+
+with col2:
+
+    puter_component = """
 <div id="puter-root" style="background-color: #0e1117; color: white; padding: 20px; font-family: sans-serif; border-radius: 10px; border: 1px solid #30363d;">
     <script src="https://js.puter.com/v2/"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
@@ -123,7 +136,7 @@ puter_component = """
             row[1] = item.id || ""; 
             row[2] = "848117"; 
             row[3] = "Fernando";
-            row[11] = ""; row[12] = ""; // The two blank gap columns
+            row[11] = ""; row[12] = "";
 
             let m = parseFloat(item.measure) || 0;
             let type = (item.type || "").toUpperCase();
@@ -166,6 +179,7 @@ puter_component = """
     };
 </script>
 """
+    components.html(puter_component, height=700, scrolling=True)
 
-# Render the component
-components.html(puter_component, height=700, scrolling=True)
+st.markdown("---")
+st.write("© Copyright Soren Clink 2026 all rights reserved")

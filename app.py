@@ -47,6 +47,7 @@ Start AI Analysis
 </div>
 
 <p id="status" style="margin-top:15px;color:#e3b341;font-weight:bold"></p>
+<progress id="progress-bar" value="0" max="100" style="width:100%; height:20px; display:none; margin-top:10px;"></progress>
 
 <div id="download-container" style="display:none;margin-top:20px;padding:20px;background:#21262d;border-radius:8px;text-align:center">
 <p style="color:#7ee787">✅ Analysis Complete!</p>
@@ -74,6 +75,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
 const status = document.getElementById("status");
+const progressBar = document.getElementById("progress-bar");
 const output = document.getElementById("output");
 const btn = document.getElementById("process-btn");
 const download = document.getElementById("download-container");
@@ -83,18 +85,16 @@ let processedData = [];
 
 async function processPage(pageNum, pdf) {
     const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({scale: 1.0}); // smaller scale for speed
+    const viewport = page.getViewport({scale: 1.0});
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     await page.render({canvasContext: ctx, viewport: viewport}).promise;
-    const img = canvas.toDataURL("image/jpeg", 0.7); // compress for speed
+    const img = canvas.toDataURL("image/jpeg", 0.7);
 
-    // OCR using Puter Mistral
     const text = await puter.ai.img2txt({source: img, provider:"mistral"});
 
-    // Parse text to JSON
     const response = await puter.ai.chat(
         "Extract debris ticket info. Return ONLY JSON {date:'MM/DD/YYYY', id:'number', type:'HANGER/LEANER', measure:0.0}",
         text
@@ -113,23 +113,33 @@ btn.onclick = async () => {
     btn.disabled = true;
     download.style.display = "none";
     processedData = [];
+    progressBar.style.display = "block";
+    progressBar.value = 0;
 
     const reader = new FileReader();
     reader.onload = async function() {
         const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
         status.innerText = `AI is analyzing ${pdf.numPages} pages...`;
 
-        // Process all pages in parallel
+        const totalPages = pdf.numPages;
         const pagePromises = [];
-        for (let i = 1; i <= pdf.numPages; i++) {
-            pagePromises.push(processPage(i, pdf));
+
+        for (let i = 1; i <= totalPages; i++) {
+            pagePromises.push(
+                processPage(i, pdf).then(result => {
+                    processedData.push(result);
+                    progressBar.value = (processedData.length / totalPages) * 100;
+                })
+            );
         }
-        processedData = await Promise.all(pagePromises);
+
+        await Promise.all(pagePromises);
 
         status.innerText = "";
         output.innerText = JSON.stringify(processedData, null, 2);
         download.style.display = "block";
         btn.disabled = false;
+        progressBar.style.display = "none";
     };
     reader.readAsArrayBuffer(file);
 };
@@ -162,7 +172,7 @@ downloadBtn.onclick = () => {
             else if (m >= 36 && m <= 47.99) { row[8]=" $175.00 "; row[10]=" $175.00 "; row[16]=" $200.00 "; row[18]=" $200.00 "; }
             else if (m >= 48) { row[9]=" $250.00 "; row[10]=" $250.00 "; row[17]=" $275.00 "; row[18]=" $275.00 "; }
         }
-        csv += row.join(",") + "\\n";
+        csv += row.join(",")+"\\n";
     });
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -174,7 +184,7 @@ downloadBtn.onclick = () => {
 </script>
 """
 
-components.html(puter_component, height=800)
+components.html(puter_component, height=850)
 
 st.divider()
 st.write("© Copyright Soren Clink 2026 all rights reserved")
